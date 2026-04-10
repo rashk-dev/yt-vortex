@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VORTEX — YouTube Downloader</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #08080f;
+      --surface: #0f0f1a;
+      --card:    #13131f;
+      --border:  #1c1c30;
+      --red:     #ff2d55;
+      --accent:  #ff6b35;
+      --white:   #eeeef8;
+      --muted:   #50506a;
+      --success: #30d158;
+    }
+
+    html { font-size: 16px; }
+    body {
+      background: var(--bg);
+      color: var(--white);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 70% 50% at 50% -10%, #ff2d5518 0%, transparent 65%),
+        radial-gradient(ellipse 50% 40% at 90% 90%,  #ff6b3512 0%, transparent 60%);
+    }
+    body::after {
+      content: '';
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      opacity: 0.03;
+    }
+
+    .wrap {
+      position: relative; z-index: 1;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 64px 20px 100px;
+    }
+
+    /* HEADER */
+    header { text-align: center; margin-bottom: 52px; animation: up .6s ease both; }
+
+    .logo { display: inline-flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .logo-box {
+      width: 44px; height: 44px; background: var(--red);
+      border-radius: 11px; display: grid; place-items: center;
+      box-shadow: 0 0 36px #ff2d5560;
+    }
+    .logo-box svg { width: 22px; height: 22px; fill: white; }
+
+    h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(4rem, 12vw, 7rem);
+      letter-spacing: .1em; line-height: 1;
+      background: linear-gradient(130deg, #fff 25%, #ff2d55 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .sub {
+      margin-top: 10px; color: var(--muted);
+      font-size: .82rem; letter-spacing: .15em;
+      text-transform: uppercase; font-weight: 600;
+    }
+
+    /* CARD */
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 22px; padding: 30px;
+      animation: up .6s .12s ease both;
+    }
+
+    /* URL ROW */
+    .url-row {
+      display: flex; gap: 8px;
+      background: var(--bg); border: 1.5px solid var(--border);
+      border-radius: 14px; padding: 6px 6px 6px 16px;
+      transition: border-color .2s;
+    }
+    .url-row:focus-within { border-color: var(--red); box-shadow: 0 0 0 3px #ff2d5514; }
+    .url-row input {
+      flex: 1; background: none; border: none; outline: none;
+      color: var(--white); font-family: 'JetBrains Mono', monospace;
+      font-size: .83rem; caret-color: var(--red); min-width: 0;
+    }
+    .url-row input::placeholder { color: var(--muted); }
+
+    .btn-primary {
+      background: var(--red); color: #fff; border: none; cursor: pointer;
+      border-radius: 10px; padding: 10px 22px;
+      font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: .88rem;
+      letter-spacing: .03em; transition: background .15s, transform .1s, box-shadow .2s;
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .btn-primary:hover  { background: #e0243e; box-shadow: 0 0 20px #ff2d5545; }
+    .btn-primary:active { transform: scale(.97); }
+    .btn-primary:disabled { opacity: .38; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    /* PREVIEW */
+    #preview { margin-top: 26px; display: none; animation: up .35s ease both; }
+
+    .vid-meta { display: flex; gap: 18px; align-items: flex-start; }
+    .thumb-box {
+      flex-shrink: 0; width: 154px; height: 87px;
+      border-radius: 10px; overflow: hidden; background: var(--border); position: relative;
+    }
+    .thumb-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .dur {
+      position: absolute; bottom: 5px; right: 5px;
+      background: #000b; color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .7rem; padding: 2px 6px; border-radius: 4px;
+    }
+    .vid-info { flex: 1; min-width: 0; }
+    .vid-info h3 {
+      font-size: .98rem; font-weight: 600; line-height: 1.45; margin-bottom: 7px;
+      overflow: hidden; display: -webkit-box;
+      -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    }
+    .vid-chips { display: flex; flex-wrap: wrap; gap: 10px; font-size: .78rem; color: var(--muted); }
+    .chip { display: flex; align-items: center; gap: 4px; }
+
+    /* PILLS */
+    .section-label {
+      font-size: .72rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .12em;
+      color: var(--muted); margin: 22px 0 10px;
+    }
+    .pills { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pill {
+      cursor: pointer; padding: 8px 16px; border-radius: 99px;
+      border: 1.5px solid var(--border); background: var(--surface);
+      color: var(--muted); font-size: .85rem; font-weight: 500;
+      transition: all .15s; user-select: none;
+    }
+    .pill:hover { border-color: var(--red); color: var(--white); }
+    .pill.active { background: var(--red); border-color: var(--red); color: #fff; box-shadow: 0 0 16px #ff2d5540; }
+    .pill.audio.active {
+      background: linear-gradient(135deg, #5e5ce6, #bf5af2);
+      border-color: #7b78f5; box-shadow: 0 0 16px #7b78f540;
+    }
+
+    /* DOWNLOAD BTN */
+    .btn-download {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      width: 100%; margin-top: 22px;
+      background: linear-gradient(130deg, var(--red), var(--accent));
+      color: #fff; border: none; cursor: pointer;
+      border-radius: 14px; padding: 15px 28px;
+      font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 1rem;
+      letter-spacing: .05em; text-transform: uppercase;
+      transition: opacity .2s, transform .1s, box-shadow .25s;
+      box-shadow: 0 4px 28px #ff2d5535;
+    }
+    .btn-download:hover  { opacity: .9; box-shadow: 0 6px 40px #ff2d5550; }
+    .btn-download:active { transform: scale(.985); }
+    .btn-download:disabled { opacity: .3; cursor: not-allowed; transform: none; }
+
+    /* STATUS */
+    #status {
+      margin-top: 18px; padding: 14px 18px; border-radius: 12px;
+      font-size: .88rem; align-items: center; gap: 12px;
+      line-height: 1.5; display: none;
+    }
+    #status.info    { background: #10102a; border: 1px solid #2a2a5a; color: #8888dd; }
+    #status.error   { background: #1e0909; border: 1px solid #3d1212; color: #ff7070; }
+    #status.success { background: #091a0f; border: 1px solid #1a4228; color: var(--success); }
+    .spin {
+      width: 17px; height: 17px; flex-shrink: 0;
+      border: 2px solid currentColor; border-top-color: transparent;
+      border-radius: 50%; animation: spin .7s linear infinite;
+    }
+
+    /* HOW IT WORKS */
+    .how {
+      margin-top: 28px; background: var(--card);
+      border: 1px solid var(--border); border-radius: 18px;
+      padding: 24px 28px; animation: up .6s .22s ease both;
+    }
+    .how h2 {
+      font-size: .75rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .14em;
+      color: var(--muted); margin-bottom: 16px;
+    }
+    .steps { display: flex; flex-direction: column; gap: 12px; }
+    .step  { display: flex; align-items: flex-start; gap: 14px; font-size: .88rem; }
+    .step-num {
+      flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%;
+      background: var(--red); color: #fff;
+      font-size: .72rem; font-weight: 700; display: grid; place-items: center;
+    }
+    .step-text { color: #aaaacc; line-height: 1.5; }
+    .step-text strong { color: var(--white); }
+
+    .feats {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px; margin-top: 20px;
+    }
+    .feat {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 16px; text-align: center;
+    }
+    .feat-icon { font-size: 1.4rem; margin-bottom: 7px; }
+    .feat-name { font-weight: 600; font-size: .86rem; margin-bottom: 3px; }
+    .feat-desc { font-size: .74rem; color: var(--muted); line-height: 1.5; }
+
+    footer {
+      margin-top: 52px; text-align: center;
+      color: var(--muted); font-size: .76rem;
+      animation: up .6s .3s ease both; line-height: 1.9;
+    }
+    footer a { color: var(--muted); }
+
+    @keyframes up {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 500px) {
+      .vid-meta { flex-direction: column; }
+      .thumb-box { width: 100%; height: 190px; }
+      .wrap { padding: 44px 16px 80px; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">
+      <div class="logo-box">
+        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      </div>
+    </div>
+    <h1>VORTEX</h1>
+    <p class="sub">Free YouTube Downloader — No Setup Required</p>
+  </header>
+
+  <div class="card">
+    <div class="url-row">
+      <input id="url" type="url"
+        placeholder="Paste a YouTube link and press Enter…"
+        autocomplete="off" spellcheck="false" />
+      <button class="btn-primary" id="btn-fetch" onclick="fetchInfo()">Fetch</button>
+    </div>
+
+    <div id="preview">
+      <div class="vid-meta" style="margin-top:22px">
+        <div class="thumb-box">
+          <img id="thumb" src="" alt="" />
+          <span class="dur" id="dur"></span>
+        </div>
+        <div class="vid-info">
+          <h3 id="vid-title"></h3>
+          <div class="vid-chips">
+            <span class="chip">👤 <span id="author"></span></span>
+            <span class="chip">👁 <span id="views"></span></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-label">Select Quality</div>
+      <div class="pills">
+        <div class="pill active" data-q="1080" onclick="pick(this)">1080p HD</div>
+        <div class="pill" data-q="720"  onclick="pick(this)">720p</div>
+        <div class="pill" data-q="480"  onclick="pick(this)">480p</div>
+        <div class="pill" data-q="360"  onclick="pick(this)">360p</div>
+        <div class="pill audio" data-q="audio" onclick="pick(this)">🎵 MP3 Audio</div>
+      </div>
+
+      <button class="btn-download" id="btn-dl" onclick="doDownload()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Download
+      </button>
+
+      <div id="status">
+        <div class="spin" id="spin" style="display:none"></div>
+        <span id="status-msg"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="how">
+    <h2>How it works</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text"><strong>Paste</strong> any YouTube URL in the box above</div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text"><strong>Pick</strong> your quality — 1080p, 720p, 480p, 360p, or MP3 audio</div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text"><strong>Click Download</strong> — file saves directly to your device</div>
+      </div>
+    </div>
+    <div class="feats">
+      <div class="feat"><div class="feat-icon">⚡</div><div class="feat-name">Instant</div><div class="feat-desc">No sign-up or waiting</div></div>
+      <div class="feat"><div class="feat-icon">☁️</div><div class="feat-name">No Backend</div><div class="feat-desc">Works on GitHub Pages</div></div>
+      <div class="feat"><div class="feat-icon">🔒</div><div class="feat-name">Private</div><div class="feat-desc">Nothing stored on servers</div></div>
+      <div class="feat"><div class="feat-icon">🆓</div><div class="feat-name">100% Free</div><div class="feat-desc">Open source forever</div></div>
+    </div>
+  </div>
+
+  <footer>
+    <p>For personal use only — respect copyright &amp; <a href="https://www.youtube.com/t/terms" target="_blank">YouTube's Terms of Service</a>.</p>
+    <p>Powered by <a href="https://cobalt.tools" target="_blank">cobalt.tools</a> open API</p>
+  </footer>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>
