@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "api/download.py": {
+      "runtime": "python3.12",
+      "maxDuration": 300
+    }
+  }
+}

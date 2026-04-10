@@ -2,20 +2,16 @@
  * VORTEX — YouTube Downloader
  *
  * Download flow:
- *  1. POST to cobalt API → get a stream/tunnel URL
- *  2. fetch() that URL as a blob in the browser
+ *  1. Call /api/download (Vercel serverless, yt-dlp) → streams the file
+ *  2. fetch() that response as a blob in the browser
  *  3. Create an object URL → click <a download> → real file saved
  *
  * This approach bypasses the cross-origin `a.download` restriction
  * because we stream the bytes locally first.
  */
 
-// ── Cobalt instances (tried in order) ───────────────────────
-const COBALT = [
-  "https://api.cobalt.tools",
-  "https://cobalt.api.timelessnesses.me",
-  "https://co.wuk.sh",
-];
+// ── Backend endpoint ─────────────────────────────────────────
+const API_BASE = "/api/download";
 
 // ── State ────────────────────────────────────────────────────
 let currentUrl = "";
@@ -89,62 +85,15 @@ function pick(el) {
   selectedQ = el.dataset.q;
 }
 
-// ── Build cobalt POST body ───────────────────────────────────
-function cobaltPayload(url, q) {
-  if (q === "audio") {
-    return { url, downloadMode: "audio", audioFormat: "mp3", audioBitrate: "320" };
-  }
-  return { url, videoQuality: q, downloadMode: "auto", filenameStyle: "pretty" };
-}
-
-// ── Call cobalt, try every instance ─────────────────────────
-async function getCobaltUrl(url, q) {
-  const payload = cobaltPayload(url, q);
-  const errors  = [];
-
-  for (const base of COBALT) {
-    try {
-      const res = await fetch(base, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body:    JSON.stringify(payload),
-        signal:  AbortSignal.timeout(25000),
-      });
-
-      // cobalt returns 200 even for some errors, always try to parse
-      const data = await res.json().catch(() => null);
-      if (!data) { errors.push(`${base}: empty response`); continue; }
-
-      // New cobalt API (v10+) uses data.status + data.url
-      // Also handle legacy { url } flat response
-      const status  = data.status;
-      const fileUrl = data.url || (data.picker && data.picker[0]?.url);
-
-      if (fileUrl && (!status || ["stream","redirect","tunnel","success"].includes(status))) {
-        return fileUrl;
-      }
-      if (status === "picker" && data.picker?.length) {
-        return data.picker[0].url;
-      }
-      if (status === "error") {
-        const code = data.error?.code || data.text || JSON.stringify(data.error) || "unknown";
-        errors.push(`${base}: ${code}`);
-        continue;
-      }
-
-      errors.push(`${base}: unrecognised response (status=${status})`);
-    } catch (e) {
-      errors.push(`${base}: ${e.message}`);
-    }
-  }
-
-  throw new Error(errors.join(" | "));
+// ── Build API download URL ───────────────────────────────────
+function buildApiUrl(url, q) {
+  return `${API_BASE}?url=${encodeURIComponent(url)}&quality=${encodeURIComponent(q)}`;
 }
 
 // ── Stream blob → real file download ────────────────────────
 async function streamDownload(fileUrl, filename, onProgress) {
-  // fetch the bytes — this is what makes the download actually work
-  // even across origins the browser can read a cobalt tunnel URL
+  // fetch the bytes through our /api/download endpoint — the browser
+  // buffers the entire response as a blob so it can trigger a real save dialog
   const res = await fetch(fileUrl, { signal: AbortSignal.timeout(0) }); // no timeout for large files
   if (!res.ok) throw new Error(`Stream fetch failed: ${res.status}`);
 
@@ -194,21 +143,18 @@ async function doDownload() {
   $("btn-dl").disabled = true;
 
   try {
-    // Step 1: get the stream URL from cobalt
-    setStatus("info", "Resolving download link…");
-    const fileUrl = await getCobaltUrl(currentUrl, selectedQ);
-
-    // Step 2: stream + save as blob
-    const ext      = selectedQ === "audio" ? "mp3" : "mp4";
+    // Audio is served as M4A (no ffmpeg needed); video as MP4
+    const ext      = selectedQ === "audio" ? "m4a" : "mp4";
     const rawTitle = $("vid-title").textContent.trim();
     const title    = rawTitle.replace(/[\\/*?:"<>|]/g, "_").slice(0, 120);
     const filename = `${title}.${ext}`;
 
-    setStatus("info", "Downloading… 0%");
+    setStatus("info", "Preparing download… this may take a moment.");
 
-    let startTime = Date.now();
+    const apiUrl    = buildApiUrl(currentUrl, selectedQ);
+    let   startTime = Date.now();
 
-    await streamDownload(fileUrl, filename, (loaded, total) => {
+    await streamDownload(apiUrl, filename, (loaded, total) => {
       const elapsed = (Date.now() - startTime) / 1000 || 0.001;
       const speed   = fmtBytes(loaded / elapsed) + "/s";
       if (total > 0) {
@@ -228,13 +174,12 @@ async function doDownload() {
 
     let msg = err.message || "Unknown error";
 
-    // friendly messages for common cobalt errors
-    if (msg.includes("content.video.unavailable") || msg.includes("unavailable")) {
+    if (msg.includes("unavailable")) {
       msg = "This video is unavailable or geo-restricted.";
-    } else if (msg.includes("content.video.age")) {
-      msg = "Age-restricted video — cobalt cannot download it.";
-    } else if (msg.includes("content.video.private")) {
+    } else if (msg.includes("private")) {
       msg = "This video is private.";
+    } else if (msg.includes("age")) {
+      msg = "Age-restricted video — cannot be downloaded.";
     } else if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
       msg = "Network error — check your internet connection and try again.";
     }
